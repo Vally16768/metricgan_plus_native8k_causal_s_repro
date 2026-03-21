@@ -1,0 +1,19 @@
+{
+  "benchmark_latency_10s": 0.0026720939592147865,
+  "count": 1690,
+  "delta_snr_mean": 6.966119405506296,
+  "pesq_mean": 2.8320260080360096,
+  "sample_paths": [
+    "checkpoints/teacher_lite/metricgan_plus_native8k_causal_xs_seed1_samples/p239_279_noisy.wav",
+    "checkpoints/teacher_lite/metricgan_plus_native8k_causal_xs_seed1_samples/p239_279_clean.wav",
+    "checkpoints/teacher_lite/metricgan_plus_native8k_causal_xs_seed1_samples/p239_279_enh.wav",
+    "checkpoints/teacher_lite/metricgan_plus_native8k_causal_xs_seed1_samples/p244_261_noisy.wav",
+    "checkpoints/teacher_lite/metricgan_plus_native8k_causal_xs_seed1_samples/p244_261_clean.wav",
+    "checkpoints/teacher_lite/metricgan_plus_native8k_causal_xs_seed1_samples/p244_261_enh.wav",
+    "checkpoints/teacher_lite/metricgan_plus_native8k_causal_xs_seed1_samples/p270_039_noisy.wav",
+    "checkpoints/teacher_lite/metricgan_plus_native8k_causal_xs_seed1_samples/p270_039_clean.wav",
+    "checkpoints/teacher_lite/metricgan_plus_native8k_causal_xs_seed1_samples/p270_039_enh.wav"
+  ],
+  "sisdr_mean": 12.948430061340332,
+  "stoi_mean": 0.8520688627563257
+}

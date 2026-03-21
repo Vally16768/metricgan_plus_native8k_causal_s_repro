@@ -1,0 +1,21 @@
+{
+  "train_csv": "/mnt/ldm/ULP-SE-aTENNuate/dataset/voicebank-demand/16k/train.csv",
+  "val_speakers": [
+    "p239",
+    "p286",
+    "p244",
+    "p270"
+  ],
+  "counts": {
+    "train_fit": 9754,
+    "val_pool": 1818,
+    "val_rank": 128,
+    "val_select": 1690
+  },
+  "manifests": {
+    "train_fit": "/mnt/ldm/ULP-SE-aTENNuate/dataset/voicebank-demand/8k/campaign/train_fit.csv",
+    "val_pool": "/mnt/ldm/ULP-SE-aTENNuate/dataset/voicebank-demand/8k/campaign/val_pool.csv",
+    "val_rank": "/mnt/ldm/ULP-SE-aTENNuate/dataset/voicebank-demand/8k/campaign/val_rank.csv",
+    "val_select": "/mnt/ldm/ULP-SE-aTENNuate/dataset/voicebank-demand/8k/campaign/val_select.csv"
+  }
+}

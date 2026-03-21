@@ -1,0 +1,16 @@
+{
+  "campaign_manifests": {
+    "test_8k": "/home/vali/Desktop/Disc-1TB/ULP-SE-aTENNuate/dataset/voicebank-demand/8k/test.csv",
+    "train_fit": "/home/vali/Desktop/Disc-1TB/ULP-SE-aTENNuate/dataset/voicebank-demand/8k/campaign/train_fit.csv",
+    "val_pool": "/home/vali/Desktop/Disc-1TB/ULP-SE-aTENNuate/dataset/voicebank-demand/8k/campaign/val_pool.csv",
+    "val_rank": "/home/vali/Desktop/Disc-1TB/ULP-SE-aTENNuate/dataset/voicebank-demand/8k/campaign/val_rank.csv",
+    "val_select": "/home/vali/Desktop/Disc-1TB/ULP-SE-aTENNuate/dataset/voicebank-demand/8k/campaign/val_select.csv"
+  },
+  "rank_count": 128,
+  "val_speakers": [
+    "p239",
+    "p286",
+    "p244",
+    "p270"
+  ]
+}
