@@ -161,6 +161,18 @@ Raportul include explicit:
 - `benchmark_latency_10s`
 - metrici de deployability/simulator pe shortlist-ul MCU
 
+### Metrice suplimentare (implicite în evaluare)
+
+- `count`
+- `csig_mean`
+- `cbak_mean`
+- `covl_mean`
+- `dnsmos_sig_mean`
+- `dnsmos_bak_mean`
+- `dnsmos_ovr_mean`
+
+Acestea sunt generate de fiecare dată când rulezi evaluarea, pentru testare și comparare cross-dataset.
+
 Metricele necanonice precum `DNSMOS`, `CSIG`, `CBAK`, `COVL` raman optionale. In configuratia curenta, `DNSMOS` este oprit implicit, exact ca in run-ul original.
 
 ## Lineage si tolerante

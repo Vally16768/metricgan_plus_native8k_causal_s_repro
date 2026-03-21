@@ -1,0 +1,45 @@
+paths:
+  output_root: "{project_root}/outputs/vbd8k"
+  tracking_root: "{project_root}/tracking/vbd8k"
+  dataset_root: "/home/vali/Desktop/Disc-1TB/ULP-SE-aTENNuate/dataset/voicebank-demand"
+  project_root: "{project_root}"
+
+tracking:
+  experiment_name: "metricgan_vbd8k"
+
+dataset:
+  dataset_type: "voicebank"
+  train_csv_16k: "{dataset_root}/8k/campaign/train_fit.csv"
+  test_csv_16k: "{dataset_root}/8k/test.csv"
+  campaign_dir_8k: "{dataset_root}/8k/campaign"
+  train_fit_csv: "{dataset_root}/8k/campaign/train_fit.csv"
+  val_rank_csv: "{dataset_root}/8k/campaign/val_rank.csv"
+  val_select_csv: "{dataset_root}/8k/campaign/val_select.csv"
+  test_csv: "{dataset_root}/8k/test.csv"
+  val_speakers: ["p239", "p286", "p244", "p270"]
+  rank_count: 128
+
+training:
+  sample_rate: 8000
+  n_fft: 256
+  hop_length: 80
+  win_length: 160
+  segment_len: 16000
+  erb_bands: 32
+  context_frames: 5
+
+stage1:
+  families: ["metricgan_plus_native8k_causal_s", "metricgan_plus_native8k_causal_xs"]
+  seeds: [0, 1]
+  loss_recipe: "D1"
+  lr: 0.0005
+  epochs: 100
+  early_stop_patience: 8
+  min_epochs: 15
+
+qat:
+  loss_recipe: "D2"
+  lr: 0.0002
+  epochs: 20
+  early_stop_patience: 4
+  min_epochs: 10

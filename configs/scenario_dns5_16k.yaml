@@ -1,0 +1,44 @@
+paths:
+  output_root: "{project_root}/outputs/dns5_16k"
+  tracking_root: "{project_root}/tracking/dns5_16k"
+  dataset_root: "/home/vali/Desktop/Disc-1TB/ULP-SE-aTENNuate/dataset/dns5-headset-16k"
+  project_root: "{project_root}"
+
+tracking:
+  experiment_name: "metricgan_dns5_16k"
+
+dataset:
+  dataset_type: "dns5"
+  train_csv_16k: "{dataset_root}/train.csv"
+  test_csv_16k: "{dataset_root}/test.csv"
+  train_fit_csv: "{dataset_root}/train.csv"
+  test_csv: "{dataset_root}/test.csv"
+  val_rank_csv: "{dataset_root}/val_rank.csv"
+  val_select_csv: "{dataset_root}/val_select.csv"
+  val_speakers: []
+  rank_count: 0
+
+training:
+  sample_rate: 16000
+  n_fft: 512
+  hop_length: 160
+  win_length: 320
+  segment_len: 32000
+  erb_bands: 32
+  context_frames: 5
+
+stage1:
+  families: ["metricgan_plus_native8k_causal_s", "metricgan_plus_native8k_causal_xs"]
+  seeds: [0, 1]
+  loss_recipe: "D1"
+  lr: 0.0005
+  epochs: 100
+  early_stop_patience: 8
+  min_epochs: 15
+
+qat:
+  loss_recipe: "D2"
+  lr: 0.0002
+  epochs: 20
+  early_stop_patience: 4
+  min_epochs: 10

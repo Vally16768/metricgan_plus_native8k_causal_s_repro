@@ -1,0 +1,12 @@
+paths:
+  output_root: "{project_root}/outputs/cross_vbd_to_dns5"
+  tracking_root: "{project_root}/tracking/cross_vbd_to_dns5"
+  project_root: "{project_root}"
+
+dataset:
+  dataset_type: "voicebank"
+  train_csv_16k: "/home/vali/Desktop/Disc-1TB/ULP-SE-aTENNuate/dataset/voicebank-demand/16k/train.csv"
+  test_csv_16k: "/home/vali/Desktop/Disc-1TB/ULP-SE-aTENNuate/dataset/dns5-headset-16k/test.csv"
+  test_csv: "/home/vali/Desktop/Disc-1TB/ULP-SE-aTENNuate/dataset/dns5-headset-16k/test.csv"
+  val_speakers: ["p239", "p286", "p244", "p270"]
+  rank_count: 128

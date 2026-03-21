@@ -70,7 +70,38 @@ def materialize_test_manifest_8k(config: dict[str, Any], *, force: bool = False)
     return _copy_manifest(config["dataset"]["test_csv_16k"], dst)
 
 
-def command_prepare_data(config: dict[str, Any], *, force: bool = False) -> dict[str, Any]:
+def _concat_csvs(output_csv: str | Path, input_csvs: list[str | Path], force: bool = False) -> str:
+    output_path = Path(output_csv)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    if output_path.exists() and not force:
+        return output_path.as_posix()
+
+    headers = None
+    rows = []
+    for in_csv in input_csvs:
+        with Path(in_csv).open(newline="") as f:
+            reader = csv.reader(f)
+            file_headers = next(reader, None)
+            if file_headers is None:
+                continue
+            if headers is None:
+                headers = file_headers
+            elif headers != file_headers:
+                raise ValueError(f"CSV header mismatch: {in_csv}")
+            rows.extend(list(reader))
+
+    if headers is None:
+        raise ValueError(f"No rows to concat for {output_csv}")
+
+    with output_path.open("w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(headers)
+        writer.writerows(rows)
+
+    return output_path.as_posix()
+
+
+def _prepare_voicebank_dataset(config: dict[str, Any], *, force: bool = False) -> dict[str, Any]:
     manifests = build_voicebank_campaign_splits(
         train_csv=config["dataset"]["train_csv_16k"],
         output_dir=config["dataset"]["campaign_dir_8k"],
@@ -78,11 +109,66 @@ def command_prepare_data(config: dict[str, Any], *, force: bool = False) -> dict
         rank_count=int(config["dataset"]["rank_count"]),
     )
     manifests["test_8k"] = materialize_test_manifest_8k(config, force=force)
-    summary = {
+    return {
         "campaign_manifests": manifests,
         "val_speakers": list(config["dataset"]["val_speakers"]),
         "rank_count": int(config["dataset"]["rank_count"]),
     }
+
+
+def _prepare_dns5_dataset(config: dict[str, Any], *, force: bool = False) -> dict[str, Any]:
+    train_csv = config["dataset"].get("train_csv_16k")
+    test_csv = config["dataset"].get("test_csv_16k")
+    val_rank_csv = config["dataset"].get("val_rank_csv")
+    val_select_csv = config["dataset"].get("val_select_csv")
+    if not train_csv or not test_csv:
+        raise ValueError("DNS5 dataset requires train_csv_16k and test_csv_16k")
+    return {
+        "campaign_manifests": {
+            "train_fit": train_csv,
+            "val_rank": val_rank_csv or "",
+            "val_select": val_select_csv or "",
+            "test": test_csv,
+        },
+        "val_speakers": config["dataset"].get("val_speakers", []),
+        "rank_count": int(config["dataset"].get("rank_count", 0)),
+    }
+
+
+def _prepare_combined_dataset(config: dict[str, Any], *, force: bool = False) -> dict[str, Any]:
+    combined_dir = Path(config["paths"]["output_root"]) / "combined_manifest"
+    combined_dir.mkdir(parents=True, exist_ok=True)
+    vbd_train = config["dataset"]["vbd_train_csv_16k"]
+    dns_train = config["dataset"]["dns5_train_csv_16k"]
+    combined_train = combined_dir / "train_combined.csv"
+    _concat_csvs(combined_train, [vbd_train, dns_train], force=force)
+
+    vbd_test = config["dataset"]["vbd_test_csv_16k"]
+    dns_test = config["dataset"]["dns5_test_csv_16k"]
+    combined_test = combined_dir / "test_combined.csv"
+    _concat_csvs(combined_test, [vbd_test, dns_test], force=force)
+
+    return {
+        "campaign_manifests": {
+            "train_fit": combined_train.as_posix(),
+            "test": combined_test.as_posix(),
+        },
+        "val_speakers": config["dataset"].get("val_speakers", []),
+        "rank_count": int(config["dataset"].get("rank_count", 0)),
+    }
+
+
+def command_prepare_data(config: dict[str, Any], *, force: bool = False) -> dict[str, Any]:
+    dataset_type = config["dataset"].get("dataset_type", "voicebank")
+    if dataset_type == "voicebank":
+        summary = _prepare_voicebank_dataset(config, force=force)
+    elif dataset_type == "dns5":
+        summary = _prepare_dns5_dataset(config, force=force)
+    elif dataset_type == "combined":
+        summary = _prepare_combined_dataset(config, force=force)
+    else:
+        raise ValueError(f"Unknown dataset_type: {dataset_type}")
+
     write_json(Path(config["paths"]["output_root"]) / "prepare_data" / "summary.json", summary)
     return summary
 
@@ -134,10 +220,10 @@ def command_build_teacher_cache(config: dict[str, Any], *, force: bool = False) 
 
 def _base_experiment_config(config: dict[str, Any], *, device: str) -> dict[str, Any]:
     return {
-        "train_csv": config["dataset"]["train_fit_csv"],
-        "val_rank_csv": config["dataset"]["val_rank_csv"],
-        "val_select_csv": config["dataset"]["val_select_csv"],
-        "test_csv": None,
+        "train_csv": config["dataset"].get("train_fit_csv") or config["dataset"].get("train_csv_16k"),
+        "val_rank_csv": config["dataset"].get("val_rank_csv"),
+        "val_select_csv": config["dataset"].get("val_select_csv"),
+        "test_csv": config["dataset"].get("test_csv") or config["dataset"].get("test_csv_16k"),
         "variant": "small",
         "segment_len": int(config["training"]["segment_len"]),
         "device": device,
@@ -441,6 +527,10 @@ def parse_args() -> argparse.Namespace:
     prepare.add_argument("--force", action="store_true")
     prepare.add_argument("--device", dest="subcommand_device", default=None)
 
+    prepare_dataset = subparsers.add_parser("prepare_dataset")
+    prepare_dataset.add_argument("--force", action="store_true")
+    prepare_dataset.add_argument("--device", dest="subcommand_device", default=None)
+
     teacher_cache = subparsers.add_parser("build_teacher_cache")
     teacher_cache.add_argument("--force", action="store_true")
     teacher_cache.add_argument("--device", dest="subcommand_device", default=None)
@@ -473,7 +563,7 @@ def main() -> None:
     config["tracking"].setdefault("experiment_name", DEFAULT_EXPERIMENT_NAME)
     device = require_cuda_device(getattr(args, "subcommand_device", None) or args.device)
 
-    if args.command == "prepare_data":
+    if args.command in ["prepare_data", "prepare_dataset"]:
         payload = command_prepare_data(config, force=bool(args.force))
     elif args.command == "build_teacher_cache":
         payload = command_build_teacher_cache(config, force=bool(args.force))
