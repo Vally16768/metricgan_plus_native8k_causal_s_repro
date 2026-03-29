@@ -1,0 +1,52 @@
+{
+  "boundaries": {
+    "train_vs_test": {
+      "clean_overlap": 0,
+      "pair_overlap": 0
+    },
+    "train_vs_val": {
+      "clean_overlap": 0,
+      "pair_overlap": 0
+    },
+    "val_vs_test": {
+      "clean_overlap": 0,
+      "pair_overlap": 0
+    }
+  },
+  "manifests": {
+    "test": "/home/vali/Desktop/ULP/metricgan_plus_native8k_causal_s_repro/outputs/combined_datasets/combined/test_combined.csv",
+    "train_fit": "/home/vali/Desktop/ULP/metricgan_plus_native8k_causal_s_repro/outputs/combined_datasets/combined/train_combined.csv",
+    "val_rank": "/home/vali/Desktop/ULP/metricgan_plus_native8k_causal_s_repro/outputs/combined_datasets/combined/val_rank_combined.csv",
+    "val_select": "/home/vali/Desktop/ULP/metricgan_plus_native8k_causal_s_repro/outputs/combined_datasets/combined/val_select_combined.csv"
+  },
+  "per_manifest": {
+    "test": {
+      "duplicate_clean_keys": 0,
+      "duplicate_pairs": 0,
+      "rows": 39242,
+      "unique_clean_keys": 39242,
+      "unique_pairs": 39242
+    },
+    "train_fit": {
+      "duplicate_clean_keys": 0,
+      "duplicate_pairs": 0,
+      "rows": 355521,
+      "unique_clean_keys": 355521,
+      "unique_pairs": 355521
+    },
+    "val_rank": {
+      "duplicate_clean_keys": 0,
+      "duplicate_pairs": 0,
+      "rows": 4224,
+      "unique_clean_keys": 4224,
+      "unique_pairs": 4224
+    },
+    "val_select": {
+      "duplicate_clean_keys": 0,
+      "duplicate_pairs": 0,
+      "rows": 28472,
+      "unique_clean_keys": 28472,
+      "unique_pairs": 28472
+    }
+  }
+}

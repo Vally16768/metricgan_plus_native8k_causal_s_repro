@@ -1,0 +1,105 @@
+paths:
+  project_root: "{project_root}"
+  dataset_root: "/home/vali/Desktop/Disc-1TB/ULP-SE-aTENNuate/dataset"
+  output_root: "{project_root}/outputs/reference_scenario"
+  tracking_root: "{project_root}/tracking/reference_scenario"
+  reference_root: "{project_root}/reference"
+  reference_export_json: "{project_root}/reference/reference_runs.json"
+  source_repo_root: "/home/vali/Desktop/ULP-SE-aTENNuate"
+  source_venv_python: "/home/vali/Desktop/ULP-SE-aTENNuate/.venv/bin/python"
+  source_mlflow_db: "/home/vali/Desktop/ULP-SE-aTENNuate/mlflow/mlflow.db"
+  source_mlruns_root: "/home/vali/Desktop/Disc-1TB/ULP-SE-aTENNuate/runtime/mlruns"
+  teacher_source_checkpoint: "{project_root}/reference/checkpoints/metricgan_plus_native8k_small.pt"
+  reference_final_checkpoint: "{project_root}/reference/checkpoints/metricgan_plus_native8k_causal_s_qat.pt"
+
+tracking:
+  experiment_name: "metricgan_reference_scenario"
+
+dataset:
+  # Reference splits - 80/10/10 for each dataset
+  voicebank_root: "{dataset_root}/voicebank-demand"
+  dns5_root: "{dataset_root}/dns5-headset-16k"
+
+  # VoiceBank reference splits
+  voicebank_train_csv: "{voicebank_root}/reference_splits/train_80.csv"
+  voicebank_val_csv: "{voicebank_root}/reference_splits/val_10.csv"
+  voicebank_test_csv: "{voicebank_root}/reference_splits/test_10.csv"
+
+  # DNS5 reference splits
+  dns5_train_csv: "{dns5_root}/reference_splits/train_80.csv"
+  dns5_val_csv: "{dns5_root}/reference_splits/val_10.csv"
+  dns5_test_csv: "{dns5_root}/reference_splits/test_10.csv"
+
+  # Combined datasets
+  combined_train_csv: "{output_root}/combined/train_combined.csv"
+  combined_val_csv: "{output_root}/combined/val_combined.csv"
+  combined_test_csv: "{output_root}/combined/test_combined.csv"
+
+  dataset_type: "reference_combined"
+  val_speakers: []
+  rank_count: 0
+
+teacher_cache:
+  out_dir: "{output_root}/teacher_cache"
+  manifest: "{output_root}/teacher_cache/teacher_cache.csv"
+
+training:
+  sample_rate: 16000
+  n_fft: 512
+  hop_length: 160
+  win_length: 320
+  segment_len: 32000
+  erb_bands: 32
+  context_frames: 5
+  guidance_classic: "none"
+  scheduler: "plateau"
+  lr_factor: 0.5
+  lr_patience: 3
+  min_lr: 0.000001
+  eval_every: 2
+  grad_clip: 5.0
+  amp: true
+  sample_count: 3
+  benchmark_seconds: 10
+  benchmark_repeats: 3
+
+# Teacher training configuration
+teacher_training:
+  families: ["metricgan_plus_native8k"]
+  variants: ["small"]
+  seeds: [0]
+  loss_recipe: "T0"  # teacher-free supervised baseline
+  lr: 0.001
+  epochs: 50
+  early_stop_patience: 10
+  min_epochs: 20
+  dataset_type: "combined"  # Train teacher on both datasets
+
+stage1:
+  families: ["metricgan_plus_native8k_causal_s"]
+  seeds: [0]
+  loss_recipe: "D1"
+  lr: 0.0005
+  epochs: 100
+  early_stop_patience: 8
+  min_epochs: 15
+
+qat:
+  loss_recipe: "D2"
+  lr: 0.0002
+  epochs: 20
+  early_stop_patience: 4
+  min_epochs: 10
+
+evaluation:
+  eval_batch_size: 16
+  compute_composite: false
+
+mcu:
+  profile: "imx_rt700_ai_audio_rt"
+
+reference:
+  teacher_run_name: "metricgan_plus_native8k_small-teacher-training-seed0"
+  stage1_run_names:
+    - "metricgan_plus_native8k_causal_s-small-lr0.0005-seg32000-lossD1-seed0"
+  final_qat_run_name: "metricgan_plus_native8k_causal_s-small-lr0.0002-seg32000-lossD2-seed0"

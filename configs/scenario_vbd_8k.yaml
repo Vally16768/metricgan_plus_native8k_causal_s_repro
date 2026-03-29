@@ -3,6 +3,7 @@ paths:
   tracking_root: "{project_root}/tracking/vbd8k"
   dataset_root: "/home/vali/Desktop/Disc-1TB/ULP-SE-aTENNuate/dataset/voicebank-demand"
   project_root: "{project_root}"
+  teacher_source_checkpoint: "/home/vali/Desktop/ULP-SE-aTENNuate/checkpoints/teacher_audit/metricgan_plus_native8k_small.pt"
 
 tracking:
   experiment_name: "metricgan_vbd8k"
@@ -18,6 +19,10 @@ dataset:
   test_csv: "{dataset_root}/8k/test.csv"
   val_speakers: ["p239", "p286", "p244", "p270"]
   rank_count: 128
+
+teacher_cache:
+  out_dir: "{dataset_root}/8k/campaign/teacher_lite_cache_8k/train_fit"
+  manifest: "{dataset_root}/8k/campaign/teacher_lite_cache_8k/train_fit/train_fit_teacher_cache.csv"
 
 training:
   sample_rate: 8000

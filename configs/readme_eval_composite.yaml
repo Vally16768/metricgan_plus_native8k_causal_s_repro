@@ -1,0 +1,98 @@
+paths:
+  project_root: "{project_root}"
+  dataset_root: "/home/vali/Desktop/Disc-1TB/ULP-SE-aTENNuate/dataset/voicebank-demand"
+  output_root: "{project_root}/outputs"
+  tracking_root: "{project_root}/tracking"
+  reference_root: "{project_root}/reference"
+  reference_export_json: "{project_root}/reference/reference_runs.json"
+  source_repo_root: "/home/vali/Desktop/ULP-SE-aTENNuate"
+  source_venv_python: "/home/vali/Desktop/ULP-SE-aTENNuate/.venv/bin/python"
+  source_mlflow_db: "/home/vali/Desktop/ULP-SE-aTENNuate/mlflow/mlflow.db"
+  source_mlruns_root: "/home/vali/Desktop/Disc-1TB/ULP-SE-aTENNuate/runtime/mlruns"
+  source_teacher_source_checkpoint: "/home/vali/Desktop/ULP-SE-aTENNuate/checkpoints/teacher_audit/metricgan_plus_native8k_small.pt"
+  source_stage1_s_seed0_checkpoint: "/home/vali/Desktop/ULP-SE-aTENNuate/checkpoints/teacher_lite/metricgan_plus_native8k_causal_s_seed0.pt"
+  source_stage1_s_seed1_checkpoint: "/home/vali/Desktop/ULP-SE-aTENNuate/checkpoints/teacher_lite/metricgan_plus_native8k_causal_s_seed1.pt"
+  source_stage1_xs_seed0_checkpoint: "/home/vali/Desktop/ULP-SE-aTENNuate/checkpoints/teacher_lite/metricgan_plus_native8k_causal_xs_seed0.pt"
+  source_stage1_xs_seed1_checkpoint: "/home/vali/Desktop/ULP-SE-aTENNuate/checkpoints/teacher_lite/metricgan_plus_native8k_causal_xs_seed1.pt"
+  source_final_checkpoint: "/home/vali/Desktop/ULP-SE-aTENNuate/checkpoints/teacher_lite/metricgan_plus_native8k_causal_s_qat.pt"
+  teacher_source_checkpoint: "{project_root}/reference/checkpoints/metricgan_plus_native8k_small.pt"
+  reference_final_checkpoint: "{project_root}/reference/checkpoints/metricgan_plus_native8k_causal_s_qat.pt"
+
+tracking:
+  experiment_name: "metricgan_native8k_causal_s_repro"
+
+dataset:
+  dataset_type: "voicebank"
+  train_csv_16k: "{dataset_root}/16k/train.csv"
+  test_csv_16k: "{dataset_root}/16k/test.csv"
+  campaign_dir_8k: "{dataset_root}/8k/campaign"
+  train_fit_csv: "{dataset_root}/8k/campaign/train_fit.csv"
+  val_pool_csv: "{dataset_root}/8k/campaign/val_pool.csv"
+  val_rank_csv: "{dataset_root}/8k/campaign/val_rank.csv"
+  val_select_csv: "{dataset_root}/8k/campaign/val_select.csv"
+  test_csv_8k: "{dataset_root}/8k/test.csv"
+  val_speakers:
+    - "p239"
+    - "p286"
+    - "p244"
+    - "p270"
+  rank_count: 128
+
+teacher_cache:
+  out_dir: "{dataset_root}/8k/campaign/teacher_lite_cache_8k/train_fit"
+  manifest: "{dataset_root}/8k/campaign/teacher_lite_cache_8k/train_fit/train_fit_teacher_cache.csv"
+
+training:
+  sample_rate: 8000
+  n_fft: 256
+  hop_length: 80
+  win_length: 160
+  segment_len: 16000
+  erb_bands: 32
+  context_frames: 5
+  guidance_classic: "none"
+  scheduler: "plateau"
+  lr_factor: 0.5
+  lr_patience: 3
+  min_lr: 0.000001
+  eval_every: 2
+  grad_clip: 5.0
+  amp: true
+  sample_count: 3
+  benchmark_seconds: 10
+  benchmark_repeats: 3
+
+stage1:
+  families:
+    - "metricgan_plus_native8k_causal_s"
+    - "metricgan_plus_native8k_causal_xs"
+  seeds:
+    - 0
+    - 1
+  loss_recipe: "D1"
+  lr: 0.0005
+  epochs: 100
+  early_stop_patience: 8
+  min_epochs: 15
+
+qat:
+  loss_recipe: "D2"
+  lr: 0.0002
+  epochs: 20
+  early_stop_patience: 4
+  min_epochs: 10
+
+evaluation:
+  eval_batch_size: 64
+  compute_composite: true
+
+mcu:
+  profile: "imx_rt700_ai_audio_rt"
+
+reference:
+  stage1_run_names:
+    - "metricgan_plus_native8k_causal_s-small-lr0.0005-seg16000-lossD1-seed0"
+    - "metricgan_plus_native8k_causal_s-small-lr0.0005-seg16000-lossD1-seed1"
+    - "metricgan_plus_native8k_causal_xs-small-lr0.0005-seg16000-lossD1-seed0"
+    - "metricgan_plus_native8k_causal_xs-small-lr0.0005-seg16000-lossD1-seed1"
+  final_qat_run_name: "metricgan_plus_native8k_causal_s-small-lr0.0002-seg16000-lossD2-seed0"

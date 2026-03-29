@@ -111,6 +111,85 @@ class ExperimentConfig:
     quantize_dynamic: bool = False
 
 
+def _normalize_manifest_path(value: str) -> str:
+    return value.replace("\\", "/").strip().lower()
+
+
+def _clean_key_from_path(value: str) -> str:
+    path = _normalize_manifest_path(value)
+    for marker in ("/clean_train/", "/clean_val/", "/clean_test/", "/clean_sources/"):
+        if marker in path:
+            return path.split(marker, 1)[1].lstrip("/")
+    return path
+
+
+def _manifest_keysets(csv_path: str) -> dict[str, Any]:
+    rows = read_pair_manifest(csv_path)
+    pair_set: set[str] = set()
+    clean_set: set[str] = set()
+    for row in rows:
+        pair_set.add(f"{_normalize_manifest_path(row.noisy.as_posix())}|{_normalize_manifest_path(row.clean.as_posix())}")
+        clean_set.add(_clean_key_from_path(row.clean.as_posix()))
+    return {
+        "path": Path(csv_path).resolve().as_posix(),
+        "rows": len(rows),
+        "pair_set": pair_set,
+        "clean_set": clean_set,
+        "duplicate_pairs": len(rows) - len(pair_set),
+        "duplicate_clean_keys": len(rows) - len(clean_set),
+    }
+
+
+def _validate_manifest_integrity(config: ExperimentConfig) -> None:
+    manifests: dict[str, str] = {"train": config.train_csv}
+    if config.val_rank_csv:
+        manifests["val_rank"] = config.val_rank_csv
+    if config.val_select_csv:
+        manifests["val_select"] = config.val_select_csv
+    if config.test_csv:
+        manifests["test"] = config.test_csv
+
+    stats = {name: _manifest_keysets(path) for name, path in manifests.items()}
+    for name, payload in stats.items():
+        if payload["duplicate_pairs"] > 0 or payload["duplicate_clean_keys"] > 0:
+            raise ValueError(
+                f"Manifest `{name}` has duplicates (pairs={payload['duplicate_pairs']} clean_keys={payload['duplicate_clean_keys']}): "
+                f"{payload['path']}"
+            )
+
+    train_pairs = stats["train"]["pair_set"]
+    train_clean = stats["train"]["clean_set"]
+    val_pairs: set[str] = set()
+    val_clean: set[str] = set()
+    for name in ("val_rank", "val_select"):
+        if name in stats:
+            val_pairs.update(stats[name]["pair_set"])
+            val_clean.update(stats[name]["clean_set"])
+    test_pairs = stats["test"]["pair_set"] if "test" in stats else set()
+    test_clean = stats["test"]["clean_set"] if "test" in stats else set()
+
+    overlap_train_val_pairs = len(train_pairs & val_pairs)
+    overlap_train_val_clean = len(train_clean & val_clean)
+    if overlap_train_val_pairs or overlap_train_val_clean:
+        raise ValueError(
+            f"Data leakage train<->val detected: pair_overlap={overlap_train_val_pairs} clean_overlap={overlap_train_val_clean}"
+        )
+
+    overlap_train_test_pairs = len(train_pairs & test_pairs)
+    overlap_train_test_clean = len(train_clean & test_clean)
+    if overlap_train_test_pairs or overlap_train_test_clean:
+        raise ValueError(
+            f"Data leakage train<->test detected: pair_overlap={overlap_train_test_pairs} clean_overlap={overlap_train_test_clean}"
+        )
+
+    overlap_val_test_pairs = len(val_pairs & test_pairs)
+    overlap_val_test_clean = len(val_clean & test_clean)
+    if overlap_val_test_pairs or overlap_val_test_clean:
+        raise ValueError(
+            f"Data leakage val<->test detected: pair_overlap={overlap_val_test_pairs} clean_overlap={overlap_val_test_clean}"
+        )
+
+
 def set_seed(seed: int) -> None:
     random.seed(seed)
     np.random.seed(seed)
@@ -626,6 +705,7 @@ def run_experiment(config: ExperimentConfig) -> dict[str, Any]:
     config.device = require_cuda_device(config.device)
     set_seed(config.seed)
     apply_runtime_profile(config)
+    _validate_manifest_integrity(config)
     if config.device.startswith("cuda"):
         torch.backends.cudnn.benchmark = True
         if hasattr(torch, "set_float32_matmul_precision"):

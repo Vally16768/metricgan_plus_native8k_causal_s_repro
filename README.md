@@ -1,205 +1,139 @@
 # Proiect Standalone Pentru `metricgan_plus_native8k_causal_s-small-lr0.0002-seg16000-lossD2-seed0`
 
-Acest proiect izoleaza strict linia de antrenare si evaluare pentru modelul deployable:
+Acest proiect izoleaza linia canonica deployable pentru `VoiceBank+DEMAND 8 kHz`:
 
-- teacher sursa: `metricgan_plus_native8k_small.pt`
-- stage1: `metricgan_plus_native8k_causal_s` si `metricgan_plus_native8k_causal_xs`, seed `0/1`, loss `D1`
-- QAT final: `metricgan_plus_native8k_causal_s`, loss `D2`, seed-ul castigatorului stage1
-- evaluare finala: `val_rank`, `val_select`, `test`
-- simulare deployability MCU: local, pe shortlist-ul din `sebench/stm32sim.py`
+- teacher mare: `metricgan_plus_native8k_small.pt`
+- student castigator: `metricgan_plus_native8k_causal_s`
+- `stage1` cu distilare din teacher cache
+- `QAT` final cu reteta `D2`
+- evaluare pe `val_rank`, `val_select`, `test`
+- simulare de deployability MCU pe shortlist-ul din `sebench/stm32sim.py`
 
-Proiectul este standalone la runtime: nu importa module din `ULP-SE-aTENNuate`. Pentru bootstrap-ul initial am inclus doar un script separat care copiaza checkpoint-uri si exporta istoriile reale ale run-urilor originale in `reference/`.
+Proiectul este standalone la runtime: nu importa module din `ULP-SE-aTENNuate`.
 
-## Structura
+Pentru documentatia tehnica exhaustiva in romana despre dataset, arhitectura, distilare, QAT, selectie, rezultate si comparatii, vezi [README_extended.md](README_extended.md).
 
-- `repro.py`: CLI-ul principal
-- `configs/default.yaml`: configuratia unica a pipeline-ului
-- `sebench/`: nucleul copiat/simplificat pentru acest model
-- `scripts/export_reference_runs.py`: export local al celor 5 run-uri originale si al checkpoint-urilor de referinta
-- `reference/`: checkpoint-uri si istorii bootstrap
-- `outputs/`: evaluari, rapoarte, checkpoint-uri noi si tracking local
+## Scope
 
-## Rezultate obținute
+Acest `README.md` ramane intentionat scurt si operational. El documenteaza doar linia finala `8 kHz` folosita pentru modelul deployable curent.
 
-Proiectul a fost evaluat pe seturile VoiceBank-DEMAND la 8kHz, cu rezultate excelente pentru îmbunătățirea calității vorbirii:
+Configuri alternative precum `DNS5`, `combined` sau `reference_scenario` exista in `configs/`, dar nu sunt fluxul primar al acestui README.
 
-### Versiunea QAT (quantized aware training):
-- **PESQ test:** 3.327
-- **STOI test:** 0.933
-- **SI-SDR test:** 17.919 dB
-- **Delta SNR test:** 9.570 dB
-- **Latență benchmark (10s audio):** 0.0037 secunde
-- **Profile MCU suportate:** STM32U5, NRF54H20, Apollo4 Blue Plus, IMX RT700, STM32N6, RA8P1 (toate sub 50mW)
+## Rezultatul Curent
 
-### Versiunea full (nequantizată):
-- **PESQ test:** 3.327
-- **STOI test:** 0.933
-- **SI-SDR test:** 17.919 dB
-- **Delta SNR test:** 9.570 dB
-- **Latență benchmark:** 0.047 secunde
-- **Profile MCU suplimentare:** Include și Alif Ensemble E3/E6
+Modelul final `QAT` are urmatoarele rezultate locale pe `VoiceBank+DEMAND 8 kHz`:
 
-Modelele sunt optimizate pentru deployare pe microcontrolere cu consum scăzut de energie.
+- `val_select PESQ = 2.8608`
+- `test PESQ = 3.3269`
+- `test STOI = 0.9335`
+- `test SI-SDR = 17.9188 dB`
+- `test Delta SNR = 9.5703 dB`
+- `benchmark_latency_10s = 0.0036808 s`
 
-## Configurație actualizată
+Profile MCU suportate in shortlist:
 
-Dataset-ul este configurat să folosească samples din locația externă `/home/vali/Desktop/Disc-1TB/ULP-SE-aTENNuate/dataset/voicebank-demand` fără să le copieze local în proiect. Acest lucru economisește spațiu și permite partajarea datelor între proiecte.
+- `STM32U5`
+- `nRF54H20`
+- `Apollo4 Blue+`
+- `i.MX RT700`
+- `STM32N6`
+- `RA8P1`
 
-Căile principale în `configs/default.yaml`:
-- `dataset_root`: `/home/vali/Desktop/Disc-1TB/ULP-SE-aTENNuate/dataset/voicebank-demand`
-- `source_mlruns_root`: `/home/vali/Desktop/Disc-1TB/ULP-SE-aTENNuate/runtime/mlruns`
+## Mediul Curent
 
-Proiectul folosește virtual environment-ul partajat la `/home/vali/Desktop/ULP/shared-venv` pentru execuție.
+Cai importante din `configs/default.yaml`:
 
-## Comenzi
+- `dataset_root = /home/vali/Desktop/Disc-1TB/ULP-SE-aTENNuate/dataset/voicebank-demand`
+- `source_mlruns_root = /home/vali/Desktop/Disc-1TB/ULP-SE-aTENNuate/runtime/mlruns`
+- `reference_root = {project_root}/reference`
+- `output_root = {project_root}/outputs`
 
-Interpreter recomandat pentru verificare rapida in mediul actual:
+Interpreter recomandat in mediul actual:
 
 ```bash
 /home/vali/Desktop/ULP/shared-venv/bin/python
 ```
 
-Comenzile principale:
+## Quick Start
 
-```bash
-python repro.py prepare_data
-python repro.py build_teacher_cache
-python repro.py train_stage1 --device cuda
-python repro.py train_qat --device cuda
-python repro.py evaluate --device auto
-python repro.py report
-python repro.py run_all --device cuda
-```
-
-Bootstrap de referinta:
+### 1. Bootstrap referinta
 
 ```bash
 python scripts/export_reference_runs.py
 ```
 
-## Configuratie implicita
+Aceasta comanda copiaza checkpoint-urile si exporta istoria run-urilor de referinta in `reference/`.
 
-`configs/default.yaml` fixeaza hiperparametrii reali pentru run-ul original:
+### 2. Verificare minima fara rerulare completa de training
 
-- `sample_rate=8000`
-- `n_fft=256`
-- `hop_length=80`
-- `win_length=160`
-- `segment_len=16000`
-- `erb_bands=32`
-- `context_frames=5`
-- `guidance_classic=none`
-- stage1: `D1`, `lr=5e-4`, `epochs=100`, `early_stop_patience=8`, `min_epochs=15`
-- QAT: `D2`, `lr=2e-4`, `epochs=20`, `early_stop_patience=4`, `min_epochs=10`
-- selectie finala: `best/val_select_pesq_mean`
+```bash
+python repro.py prepare_data
+python repro.py evaluate --device auto
+python repro.py report
+```
 
-`batch_size`, `grad_accum` si `eval_batch_size` sunt lasate sa urmeze logica originala din `sebench.training.apply_runtime_profile`.
+Aceasta este ordinea minima recomandata pentru a reconstrui artefactele de evaluare si raport pentru linia canonica.
 
-## Split-uri VoiceBank + DEMAND
+### 3. Rerulare completa a liniei deployable
 
-`prepare_data` reproduce exact split-ul intern de campanie:
+```bash
+python repro.py prepare_data
+python repro.py build_teacher_cache --device cuda
+python repro.py train_stage1 --device cuda
+python repro.py train_qat --device cuda
+python repro.py evaluate --device cuda
+python repro.py report
+```
+
+Pentru rerulare completa este recomandat `--device cuda`.
+
+## Configuratia Canonica
+
+`configs/default.yaml` fixeaza hiperparametrii liniei originale:
+
+- `sample_rate = 8000`
+- `n_fft = 256`
+- `hop_length = 80`
+- `win_length = 160`
+- `segment_len = 16000`
+- `erb_bands = 32`
+- `context_frames = 5`
+- `guidance_classic = none`
+- `stage1 = D1, lr=5e-4, epochs=100`
+- `qat = D2, lr=2e-4, epochs=20`
+- selectie finala intre candidati dupa `best/val_select_pesq_mean`
+
+Splitul de campanie pentru `VoiceBank+DEMAND 8 kHz` este:
 
 - `val_speakers = p239, p286, p244, p270`
 - `rank_count = 128`
 
-Manifestul `8k/test.csv` este materializat explicit, dar pastreaza aceleasi perechi oficiale de test.
+## Structura Relevanta
 
-## Teacher Cache
+- `repro.py`: CLI principal pentru pipeline
+- `configs/default.yaml`: configul canonical `8 kHz`
+- `sebench/`: implementarea standalone pentru modele, training, cache, splituri si raportare
+- `reference/`: checkpoint-uri si istoric bootstrap
+- `outputs/`: evaluari, rapoarte si checkpoint-uri locale
+- `tracking/`: tracking local fara MLflow extern obligatoriu
 
-`build_teacher_cache`:
+## Artefacte Generate
 
-1. incarca `metricgan_plus_native8k_small.pt`
-2. aplica cuantizare dinamica locala
-3. genereaza `teacher_lite_cache_8k/train_fit/train_fit_teacher_cache.csv`
-4. salveaza `teacher_wav`, `teacher_mask_erb` si optional guidance
+`report` construieste in mod normal:
 
-## Tracking si rapoarte
+- `outputs/evaluations/reference_qat/`
+- `outputs/reports/reference_qat/report.md`
+- `outputs/reports/reference_qat/report_summary.json`
+- `outputs/reports/reference_qat/training_curves.png`
+- `outputs/reports/reference_qat/stage1_comparison.png`
+- `outputs/reports/reference_qat/deployability_profiles.png`
+- `outputs/reports/reference_qat/sample_waveforms.png`
+- `outputs/reports/reference_qat/sample_spectrograms.png`
 
-Tracking-ul este local, in `tracking/`, fara MLflow extern obligatoriu. Formatul retine:
+## Note Operationale
 
-- `params.json`
-- `latest_metrics.json`
-- `metrics_history.jsonl`
-- `artifacts/`
-
-`report` construieste:
-
-- `canonical_metrics.csv`
-- `metric_history.csv`
-- `report_summary.json`
-- `report.md`
-- `training_curves.png`
-- `stage1_comparison.png`
-- `deployability_profiles.png`
-- `sample_waveforms.png`
-- `sample_spectrograms.png`
-- `audio_samples/`
-
-## Metrici canonice
-
-Raportul include explicit:
-
-- `train/loss`
-- `train/wave_loss`
-- `train/spectral_loss`
-- `train/sisdr_loss`
-- `train/teacher_mask_loss`
-- `train/teacher_wave_loss`
-- `lr`
-- `val_rank/pesq_mean`
-- `val_rank/stoi_mean`
-- `val_rank/sisdr_mean`
-- `val_rank/delta_snr_mean`
-- `best/val_select_pesq_mean`
-- `best/val_select_stoi_mean`
-- `best/val_select_sisdr_mean`
-- `best/val_select_delta_snr_mean`
-- `test/pesq_mean`
-- `test/stoi_mean`
-- `test/sisdr_mean`
-- `test/delta_snr_mean`
-- `benchmark_latency_10s`
-- metrici de deployability/simulator pe shortlist-ul MCU
-
-### Metrice suplimentare (implicite în evaluare)
-
-- `count`
-- `csig_mean`
-- `cbak_mean`
-- `covl_mean`
-- `dnsmos_sig_mean`
-- `dnsmos_bak_mean`
-- `dnsmos_ovr_mean`
-
-Acestea sunt generate de fiecare dată când rulezi evaluarea, pentru testare și comparare cross-dataset.
-
-Metricele necanonice precum `DNSMOS`, `CSIG`, `CBAK`, `COVL` raman optionale. In configuratia curenta, `DNSMOS` este oprit implicit, exact ca in run-ul original.
-
-## Lineage si tolerante
-
-Linia reproducerii este:
-
-1. `metricgan_plus_native8k_small.pt`
-2. cache `teacher_lite_cache_8k`
-3. stage1 `causal_s` si `causal_xs`
-4. selectia castigatorului dupa `best/val_select_pesq_mean`
-5. QAT final `D2`
-6. evaluare completa pe `val_rank`, `val_select`, `test`
-
-Tolerante recomandate:
-
-- pentru evaluarea checkpoint-ului de referinta: practic identic cu exportul original
-- pentru rerulare integrala de training: apropiere numerica rezonabila, nu identitate bitwise
-
-## Validare recomandata
-
-Ordinea minima de verificare:
-
-```bash
-python scripts/export_reference_runs.py
-python repro.py prepare_data
-python repro.py evaluate --device auto
-python repro.py report
-```
-
-Pentru rerulare completa a antrenarii este recomandat `--device cuda`.
+- `build_teacher_cache` salveaza `teacher_wav` si `teacher_mask_erb` pentru train.
+- `val_rank` este folosit pentru selectie in interiorul unui run.
+- `val_select` este folosit pentru comparatia finala intre candidati.
+- `test` ramane hold-out final.
+- Toleranta corecta la rerulare completa este apropiere numerica rezonabila, nu identitate bitwise.

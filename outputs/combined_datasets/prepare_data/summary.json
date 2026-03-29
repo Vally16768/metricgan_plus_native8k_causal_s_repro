@@ -1,0 +1,107 @@
+{
+  "combined_manifests": {
+    "test": "/home/vali/Desktop/ULP/metricgan_plus_native8k_causal_s_repro/outputs/combined_datasets/combined/test_combined.csv",
+    "train_fit": "/home/vali/Desktop/ULP/metricgan_plus_native8k_causal_s_repro/outputs/combined_datasets/combined/train_combined.csv",
+    "val_rank": "/home/vali/Desktop/ULP/metricgan_plus_native8k_causal_s_repro/outputs/combined_datasets/combined/val_rank_combined.csv",
+    "val_select": "/home/vali/Desktop/ULP/metricgan_plus_native8k_causal_s_repro/outputs/combined_datasets/combined/val_select_combined.csv"
+  },
+  "dns5": {
+    "test_csv": "/home/vali/Desktop/ULP/metricgan_plus_native8k_causal_s_repro/outputs/combined_datasets/combined/dns5_train_test_split/dns5_test.csv",
+    "test_included_in_combined": true,
+    "test_source": "derived_from_dns5_train",
+    "train_csv": "/home/vali/Desktop/Disc-1TB/ULP-SE-aTENNuate/dataset/dns5-headset-16k/train.csv",
+    "train_fit_csv": "/home/vali/Desktop/ULP/metricgan_plus_native8k_causal_s_repro/outputs/combined_datasets/combined/dns5_train_test_split/dns5_train.csv",
+    "train_test_split": {
+      "duplicates_removed": 0,
+      "reused": false,
+      "rows_test": 38418,
+      "rows_total": 384185,
+      "rows_train": 345767,
+      "rows_unique": 384185,
+      "target_test_fraction": 0.1,
+      "test": "/home/vali/Desktop/ULP/metricgan_plus_native8k_causal_s_repro/outputs/combined_datasets/combined/dns5_train_test_split/dns5_test.csv",
+      "train": "/home/vali/Desktop/ULP/metricgan_plus_native8k_causal_s_repro/outputs/combined_datasets/combined/dns5_train_test_split/dns5_train.csv"
+    },
+    "val_csv": "/home/vali/Desktop/Disc-1TB/ULP-SE-aTENNuate/dataset/dns5-headset-16k/val.csv",
+    "val_rank_count": 4096,
+    "val_split": {
+      "rank": "/home/vali/Desktop/ULP/metricgan_plus_native8k_causal_s_repro/outputs/combined_datasets/combined/dns5_val_split/dns5_val_rank.csv",
+      "select": "/home/vali/Desktop/ULP/metricgan_plus_native8k_causal_s_repro/outputs/combined_datasets/combined/dns5_val_split/dns5_val_select.csv"
+    }
+  },
+  "integrity": {
+    "boundaries": {
+      "train_vs_test": {
+        "clean_overlap": 0,
+        "pair_overlap": 0
+      },
+      "train_vs_val": {
+        "clean_overlap": 0,
+        "pair_overlap": 0
+      },
+      "val_vs_test": {
+        "clean_overlap": 0,
+        "pair_overlap": 0
+      }
+    },
+    "manifests": {
+      "test": "/home/vali/Desktop/ULP/metricgan_plus_native8k_causal_s_repro/outputs/combined_datasets/combined/test_combined.csv",
+      "train_fit": "/home/vali/Desktop/ULP/metricgan_plus_native8k_causal_s_repro/outputs/combined_datasets/combined/train_combined.csv",
+      "val_rank": "/home/vali/Desktop/ULP/metricgan_plus_native8k_causal_s_repro/outputs/combined_datasets/combined/val_rank_combined.csv",
+      "val_select": "/home/vali/Desktop/ULP/metricgan_plus_native8k_causal_s_repro/outputs/combined_datasets/combined/val_select_combined.csv"
+    },
+    "per_manifest": {
+      "test": {
+        "duplicate_clean_keys": 0,
+        "duplicate_pairs": 0,
+        "rows": 39242,
+        "unique_clean_keys": 39242,
+        "unique_pairs": 39242
+      },
+      "train_fit": {
+        "duplicate_clean_keys": 0,
+        "duplicate_pairs": 0,
+        "rows": 355521,
+        "unique_clean_keys": 355521,
+        "unique_pairs": 355521
+      },
+      "val_rank": {
+        "duplicate_clean_keys": 0,
+        "duplicate_pairs": 0,
+        "rows": 4224,
+        "unique_clean_keys": 4224,
+        "unique_pairs": 4224
+      },
+      "val_select": {
+        "duplicate_clean_keys": 0,
+        "duplicate_pairs": 0,
+        "rows": 28472,
+        "unique_clean_keys": 28472,
+        "unique_pairs": 28472
+      }
+    }
+  },
+  "notes": [
+    "VoiceBank test uses official test.csv.",
+    "VoiceBank validation is speaker-holdout from official train.csv.",
+    "DNS5 val is split into disjoint val_rank/val_select.",
+    "DNS5 test comes from explicit dns5_test_csv or (fallback) deterministic split from DNS5 train."
+  ],
+  "voicebank": {
+    "campaign_manifests": {
+      "train_fit": "/home/vali/Desktop/Disc-1TB/ULP-SE-aTENNuate/dataset/voicebank-demand/16k/campaign/train_fit.csv",
+      "val_pool": "/home/vali/Desktop/Disc-1TB/ULP-SE-aTENNuate/dataset/voicebank-demand/16k/campaign/val_pool.csv",
+      "val_rank": "/home/vali/Desktop/Disc-1TB/ULP-SE-aTENNuate/dataset/voicebank-demand/16k/campaign/val_rank.csv",
+      "val_select": "/home/vali/Desktop/Disc-1TB/ULP-SE-aTENNuate/dataset/voicebank-demand/16k/campaign/val_select.csv"
+    },
+    "rank_count": 128,
+    "test_csv": "/home/vali/Desktop/Disc-1TB/ULP-SE-aTENNuate/dataset/voicebank-demand/16k/test.csv",
+    "train_csv": "/home/vali/Desktop/Disc-1TB/ULP-SE-aTENNuate/dataset/voicebank-demand/16k/train.csv",
+    "val_speakers": [
+      "p239",
+      "p286",
+      "p244",
+      "p270"
+    ]
+  }
+}

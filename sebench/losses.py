@@ -94,10 +94,10 @@ class CompositeEnhancementLoss(nn.Module):
     ):
         super().__init__()
         self.recipe = recipe.upper()
-        if self.recipe not in {"D1", "D2"}:
+        if self.recipe not in {"D1", "D2", "T0"}:
             raise ValueError(
                 f"Unsupported loss recipe for the standalone project: {recipe}. "
-                "This project is scoped only for the D1/D2 teacher-lite lineage."
+                "Supported recipes: T0 (teacher-free), D1, D2."
             )
         self.erb_bands = erb_bands
         self.sample_rate = sample_rate
@@ -120,10 +120,27 @@ class CompositeEnhancementLoss(nn.Module):
         teacher_mask_erb: torch.Tensor | None = None,
     ) -> LossBreakdown:
         del epoch, total_epochs
+
+        wave = self.wave_loss(enhanced, clean)
+        zero = enhanced.new_tensor(0.0)
+        if self.recipe == "T0":
+            spectral = self.complex_loss(enhanced, clean)
+            sisdr = self.sisdr_loss(enhanced, clean)
+            total = 0.70 * spectral + 0.25 * wave + 0.05 * sisdr
+            return LossBreakdown(
+                total=total,
+                wave=wave,
+                spectral=spectral,
+                sisdr=sisdr,
+                noise_gate=zero,
+                speech_preserve=zero,
+                teacher_mask=zero,
+                teacher_wave=zero,
+            )
+
         if teacher_wav is None or teacher_mask_erb is None:
             raise ValueError(f"Loss recipe {self.recipe} requires teacher_wav and teacher_mask_erb.")
 
-        wave = self.wave_loss(enhanced, clean)
         student_mask = waveform_to_erb_mask(
             noisy,
             enhanced,
@@ -143,7 +160,6 @@ class CompositeEnhancementLoss(nn.Module):
             sisdr = self.sisdr_loss(enhanced, clean)
             total = total + 0.05 * sisdr
 
-        zero = enhanced.new_tensor(0.0)
         return LossBreakdown(
             total=total,
             wave=wave,

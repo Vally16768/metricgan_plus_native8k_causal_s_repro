@@ -1,21 +1,3 @@
-scope,metric,value
-val_rank_metrics,count,128
-val_rank_metrics,pesq_mean,2.852797957137227
-val_rank_metrics,stoi_mean,0.8579840602070519
-val_rank_metrics,sisdr_mean,13.150760650634766
-val_rank_metrics,delta_snr_mean,7.557092340761691
-val_select_metrics,benchmark_latency_10s,0.003680767685485383
-val_select_metrics,count,1690
-val_select_metrics,delta_snr_mean,7.418442455392723
-val_select_metrics,pesq_mean,2.8608383980023087
-val_select_metrics,sisdr_mean,13.380144119262695
-val_select_metrics,stoi_mean,0.85379410165859
-test_metrics,count,824
-test_metrics,pesq_mean,3.3269297583299933
-test_metrics,stoi_mean,0.9334592383550615
-test_metrics,sisdr_mean,17.918807983398438
-test_metrics,delta_snr_mean,9.5703053655789
-benchmark,benchmark_latency_10s,0.003680767685485383
-mcu_rollup,best_profile_name,"ra8p1_ai_audio_rt"
-mcu_rollup,best_power_profile_name,"apollo4_blue_plus_low_power_rt"
-mcu_rollup,best_power_profile_avg_power_mw,5.21668947362957
+version https://git-lfs.github.com/spec/v1
+oid sha256:9990ce1bc6c1f566ad806da37741e26c739cfc99f5dfc26b9f672a656bc15d13
+size 945

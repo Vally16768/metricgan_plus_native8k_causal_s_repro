@@ -1,0 +1,21 @@
+{
+  "count": 128,
+  "delta_snr_mean": 7.557092340761691,
+  "pesq_mean": 2.852797957137227,
+  "sample_paths": [
+    "/home/vali/Desktop/metricgan_plus_native8k_causal_s_repro/outputs/evaluations/reference_qat/samples/val_rank/p239_316_clean.wav",
+    "/home/vali/Desktop/metricgan_plus_native8k_causal_s_repro/outputs/evaluations/reference_qat/samples/val_rank/p239_316_enh.wav",
+    "/home/vali/Desktop/metricgan_plus_native8k_causal_s_repro/outputs/evaluations/reference_qat/samples/val_rank/p239_316_noisy.wav",
+    "/home/vali/Desktop/metricgan_plus_native8k_causal_s_repro/outputs/evaluations/reference_qat/samples/val_rank/p270_412_clean.wav",
+    "/home/vali/Desktop/metricgan_plus_native8k_causal_s_repro/outputs/evaluations/reference_qat/samples/val_rank/p270_412_enh.wav",
+    "/home/vali/Desktop/metricgan_plus_native8k_causal_s_repro/outputs/evaluations/reference_qat/samples/val_rank/p270_412_noisy.wav",
+    "/home/vali/Desktop/metricgan_plus_native8k_causal_s_repro/outputs/evaluations/reference_qat/samples/val_rank/p286_041_clean.wav",
+    "/home/vali/Desktop/metricgan_plus_native8k_causal_s_repro/outputs/evaluations/reference_qat/samples/val_rank/p286_041_enh.wav",
+    "/home/vali/Desktop/metricgan_plus_native8k_causal_s_repro/outputs/evaluations/reference_qat/samples/val_rank/p286_041_noisy.wav"
+  ],
+  "sisdr_mean": 13.150760650634766,
+  "stoi_mean": 0.8579840602070519,
+  "csig_mean": 3.953057502612129,
+  "cbak_mean": 3.2145072279330993,
+  "covl_mean": 3.4047326625055976
+}

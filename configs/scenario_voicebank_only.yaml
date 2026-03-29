@@ -1,0 +1,71 @@
+paths:
+  project_root: "{project_root}"
+  dataset_root: "/home/vali/Desktop/Disc-1TB/ULP-SE-aTENNuate/dataset"
+  output_root: "{project_root}/outputs/voicebank_only"
+  tracking_root: "{project_root}/tracking/voicebank_only"
+  reference_root: "{project_root}/reference"
+  teacher_source_checkpoint: "{project_root}/reference/checkpoints/metricgan_plus_native8k_small.pt"
+
+tracking:
+  experiment_name: "metricgan_voicebank_only"
+
+dataset:
+  dataset_type: "reference_combined"
+  voicebank_root: "{dataset_root}/voicebank-demand"
+  dns5_root: "{dataset_root}/dns5-headset-16k"
+  train_fit_csv: "{voicebank_root}/reference_splits/train_80.csv"
+  val_rank_csv: "{voicebank_root}/reference_splits/val_10.csv"
+  val_select_csv: "{voicebank_root}/reference_splits/val_10.csv"
+  test_csv: "{voicebank_root}/reference_splits/test_10.csv"
+
+teacher_cache:
+  out_dir: "{output_root}/teacher_cache"
+  manifest: "{output_root}/teacher_cache/teacher_cache.csv"
+
+training:
+  sample_rate: 16000
+  n_fft: 512
+  hop_length: 160
+  win_length: 320
+  segment_len: 32000
+  erb_bands: 32
+  context_frames: 5
+  guidance_classic: "none"
+  scheduler: "plateau"
+  lr_factor: 0.5
+  lr_patience: 3
+  min_lr: 0.000001
+  eval_every: 2
+  grad_clip: 5.0
+  amp: true
+  sample_count: 3
+  benchmark_seconds: 10
+  benchmark_repeats: 3
+
+stage1:
+  families: ["metricgan_plus_native8k_causal_s"]
+  seeds: [0]
+  loss_recipe: "D1"
+  lr: 0.0005
+  epochs: 100
+  early_stop_patience: 8
+  min_epochs: 15
+
+qat:
+  loss_recipe: "D2"
+  lr: 0.0002
+  epochs: 20
+  early_stop_patience: 4
+  min_epochs: 10
+
+evaluation:
+  eval_batch_size: 16
+  compute_composite: false
+
+mcu:
+  profile: "imx_rt700_ai_audio_rt"
+
+reference:
+  stage1_run_names:
+    - "metricgan_plus_native8k_causal_s-small-lr0.0005-seg32000-lossD1-seed0"
+  final_qat_run_name: "metricgan_plus_native8k_causal_s-small-lr0.0002-seg32000-lossD2-seed0"

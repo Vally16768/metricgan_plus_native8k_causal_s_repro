@@ -1,0 +1,9 @@
+atunci creaza un scenariu in care sa antrenez teacher-ul pe DNS challenge si voicebannk+demand. split-urile sa fie 80 training, 10 validation, 10 test.
+
+acest split sa fie de referinta pentru toate experimentele pe care o sa le folosim. 
+
+trebuie sa separam odata 80/10/10 pentru DNS-challange si inca o data 80/10/10 pentru voicebank + demand. 
+
+cand o sa folosim cele 2 dataset impreuna doar insumam 2 csv-uri. 
+
+asa excludem confuziile intre diferite scenarii de testare. actualizeaza documentatia cu aceste detalii. teacher trebuie sa fie antrenat cu cele 2 dataset si evaluat individual. dupa care studentul este antrenat cu cate un dataset individual, evaluat si dupa antrenat cu cele 2 dataset si evaluat.

@@ -4,7 +4,10 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import random
+import re
 import shutil
+from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +27,7 @@ from sebench.training import ExperimentConfig, benchmark_inference, evaluate_man
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent
+SPEAKER_RE = re.compile(r"^(p\d+)_", re.IGNORECASE)
 
 
 def _expand_tree(payload: Any, context: dict[str, str]) -> Any:
@@ -77,7 +81,8 @@ def _concat_csvs(output_csv: str | Path, input_csvs: list[str | Path], force: bo
         return output_path.as_posix()
 
     headers = None
-    rows = []
+    rows: list[list[str]] = []
+    seen: set[str] = set()
     for in_csv in input_csvs:
         with Path(in_csv).open(newline="") as f:
             reader = csv.reader(f)
@@ -88,7 +93,17 @@ def _concat_csvs(output_csv: str | Path, input_csvs: list[str | Path], force: bo
                 headers = file_headers
             elif headers != file_headers:
                 raise ValueError(f"CSV header mismatch: {in_csv}")
-            rows.extend(list(reader))
+            for row in reader:
+                if not row:
+                    continue
+                if len(row) >= 2 and headers[:2] == ["noisy", "clean"]:
+                    key = f"{_normalize_path(row[0])}|{_normalize_path(row[1])}"
+                else:
+                    key = "\x1f".join(row)
+                if key in seen:
+                    continue
+                seen.add(key)
+                rows.append(row)
 
     if headers is None:
         raise ValueError(f"No rows to concat for {output_csv}")
@@ -99,6 +114,133 @@ def _concat_csvs(output_csv: str | Path, input_csvs: list[str | Path], force: bo
         writer.writerows(rows)
 
     return output_path.as_posix()
+
+
+def _normalize_path(value: str) -> str:
+    return value.replace("\\", "/").strip().lower()
+
+
+def _pair_key(noisy_path: str, clean_path: str) -> str:
+    return f"{_normalize_path(noisy_path)}|{_normalize_path(clean_path)}"
+
+
+def _clean_key(clean_path: str) -> str:
+    value = _normalize_path(clean_path)
+    for marker in ("/clean_train/", "/clean_val/", "/clean_test/", "/clean_sources/"):
+        if marker in value:
+            return value.split(marker, 1)[1].lstrip("/")
+    return value
+
+
+def _speaker_key(clean_path: str) -> str | None:
+    match = SPEAKER_RE.match(Path(clean_path).name)
+    if not match:
+        return None
+    return match.group(1).lower()
+
+
+def _write_manifest_rows(path: Path, rows: list[Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=["noisy", "clean"])
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({"noisy": row.noisy.as_posix(), "clean": row.clean.as_posix()})
+
+
+def _manifest_keysets(manifest_path: str | Path) -> dict[str, Any]:
+    rows = read_pair_manifest(manifest_path)
+    pair_set: set[str] = set()
+    clean_set: set[str] = set()
+    for row in rows:
+        pair_set.add(_pair_key(row.noisy.as_posix(), row.clean.as_posix()))
+        clean_set.add(_clean_key(row.clean.as_posix()))
+    return {
+        "rows": len(rows),
+        "pair_set": pair_set,
+        "clean_set": clean_set,
+        "duplicate_pairs": len(rows) - len(pair_set),
+        "duplicate_clean_keys": len(rows) - len(clean_set),
+    }
+
+
+def _audit_manifest_bundle(
+    manifests: dict[str, str | Path],
+    *,
+    strict: bool,
+    out_path: str | Path | None = None,
+) -> dict[str, Any]:
+    loaded: dict[str, dict[str, Any]] = {}
+    for label, path in manifests.items():
+        loaded[label] = _manifest_keysets(path)
+
+    per_manifest = {
+        label: {
+            "rows": payload["rows"],
+            "duplicate_pairs": payload["duplicate_pairs"],
+            "duplicate_clean_keys": payload["duplicate_clean_keys"],
+            "unique_pairs": len(payload["pair_set"]),
+            "unique_clean_keys": len(payload["clean_set"]),
+        }
+        for label, payload in loaded.items()
+    }
+
+    categories: dict[str, dict[str, set[str]]] = {
+        "train": {"pair": set(), "clean": set()},
+        "val": {"pair": set(), "clean": set()},
+        "test": {"pair": set(), "clean": set()},
+    }
+
+    for label, payload in loaded.items():
+        lower = label.lower()
+        if lower.startswith("train"):
+            bucket = "train"
+        elif lower.startswith("val"):
+            bucket = "val"
+        elif lower.startswith("test"):
+            bucket = "test"
+        else:
+            continue
+        categories[bucket]["pair"].update(payload["pair_set"])
+        categories[bucket]["clean"].update(payload["clean_set"])
+
+    boundaries = {
+        "train_vs_val": {
+            "pair_overlap": len(categories["train"]["pair"] & categories["val"]["pair"]),
+            "clean_overlap": len(categories["train"]["clean"] & categories["val"]["clean"]),
+        },
+        "train_vs_test": {
+            "pair_overlap": len(categories["train"]["pair"] & categories["test"]["pair"]),
+            "clean_overlap": len(categories["train"]["clean"] & categories["test"]["clean"]),
+        },
+        "val_vs_test": {
+            "pair_overlap": len(categories["val"]["pair"] & categories["test"]["pair"]),
+            "clean_overlap": len(categories["val"]["clean"] & categories["test"]["clean"]),
+        },
+    }
+
+    summary = {
+        "manifests": {label: Path(path).as_posix() for label, path in manifests.items()},
+        "per_manifest": per_manifest,
+        "boundaries": boundaries,
+    }
+
+    if out_path:
+        write_json(Path(out_path), summary)
+
+    if strict:
+        dup_issues = [
+            label
+            for label, payload in per_manifest.items()
+            if payload["duplicate_pairs"] > 0 or payload["duplicate_clean_keys"] > 0
+        ]
+        if dup_issues:
+            raise ValueError(f"Duplicate rows/clean keys detected in manifests: {dup_issues}")
+        for boundary, payload in boundaries.items():
+            if payload["pair_overlap"] > 0 or payload["clean_overlap"] > 0:
+                raise ValueError(f"Data leakage detected on {boundary}: {payload}")
+
+    return summary
 
 
 def _prepare_voicebank_dataset(config: dict[str, Any], *, force: bool = False) -> dict[str, Any]:
@@ -158,6 +300,402 @@ def _prepare_combined_dataset(config: dict[str, Any], *, force: bool = False) ->
     }
 
 
+def _split_manifest_rank_select(
+    manifest_path: str | Path,
+    output_dir: str | Path,
+    *,
+    rank_count: int,
+    force: bool = False,
+    prefix: str = "split",
+) -> dict[str, str]:
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    rank_csv = output_dir / f"{prefix}_rank.csv"
+    select_csv = output_dir / f"{prefix}_select.csv"
+    if rank_csv.exists() and select_csv.exists() and not force:
+        return {"rank": rank_csv.as_posix(), "select": select_csv.as_posix()}
+
+    rows = read_pair_manifest(manifest_path)
+    dedup: dict[str, Any] = {}
+    for row in rows:
+        key = _pair_key(row.noisy.as_posix(), row.clean.as_posix())
+        if key not in dedup:
+            dedup[key] = row
+    ordered = sorted(dedup.values(), key=lambda row: _pair_key(row.noisy.as_posix(), row.clean.as_posix()))
+
+    rank_size = max(0, min(int(rank_count), len(ordered)))
+    rank_rows = ordered[:rank_size]
+    select_rows = ordered[rank_size:]
+
+    _write_manifest_rows(rank_csv, rank_rows)
+    _write_manifest_rows(select_csv, select_rows)
+    return {"rank": rank_csv.as_posix(), "select": select_csv.as_posix()}
+
+
+def _split_manifest_train_test(
+    manifest_path: str | Path,
+    output_dir: str | Path,
+    *,
+    test_fraction: float,
+    seed: int = 42,
+    force: bool = False,
+    prefix: str = "split",
+) -> dict[str, Any]:
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    train_csv = output_dir / f"{prefix}_train.csv"
+    test_csv = output_dir / f"{prefix}_test.csv"
+    if train_csv.exists() and test_csv.exists() and not force:
+        return {"train": train_csv.as_posix(), "test": test_csv.as_posix(), "reused": True}
+
+    rows = read_pair_manifest(manifest_path)
+    dedup: dict[str, Any] = {}
+    for row in rows:
+        key = _pair_key(row.noisy.as_posix(), row.clean.as_posix())
+        if key not in dedup:
+            dedup[key] = row
+    unique_rows = list(dedup.values())
+
+    target_fraction = max(0.0, min(0.5, float(test_fraction)))
+    if not unique_rows:
+        _write_manifest_rows(train_csv, [])
+        _write_manifest_rows(test_csv, [])
+        return {"train": train_csv.as_posix(), "test": test_csv.as_posix(), "reused": False, "rows": 0}
+
+    groups: dict[str, list[Any]] = defaultdict(list)
+    for row in unique_rows:
+        groups[_clean_key(row.clean.as_posix())].append(row)
+    group_keys = sorted(groups.keys())
+    rng = random.Random(int(seed))
+    rng.shuffle(group_keys)
+
+    total = len(unique_rows)
+    target_test = int(round(total * target_fraction))
+    target_test = max(1, min(target_test, total - 1)) if total > 1 and target_fraction > 0 else 0
+
+    train_rows: list[Any] = []
+    test_rows: list[Any] = []
+    for key in group_keys:
+        bucket = test_rows if len(test_rows) < target_test else train_rows
+        bucket.extend(groups[key])
+
+    # Safety: never leave train empty when we have enough rows.
+    if not train_rows and len(test_rows) > 1:
+        train_rows.append(test_rows.pop())
+
+    _write_manifest_rows(train_csv, train_rows)
+    _write_manifest_rows(test_csv, test_rows)
+    return {
+        "train": train_csv.as_posix(),
+        "test": test_csv.as_posix(),
+        "reused": False,
+        "rows_total": len(rows),
+        "rows_unique": len(unique_rows),
+        "rows_train": len(train_rows),
+        "rows_test": len(test_rows),
+        "duplicates_removed": len(rows) - len(unique_rows),
+        "target_test_fraction": target_fraction,
+    }
+
+
+def _prepare_academic_combined_dataset(config: dict[str, Any], *, force: bool = False) -> dict[str, Any]:
+    dataset_cfg = config["dataset"]
+    voicebank_root = Path(dataset_cfg["voicebank_root"])
+    dns5_root = Path(dataset_cfg["dns5_root"])
+
+    # VoiceBank+DEMAND uses official train/test; validation is built from official train.
+    vbd_train = (voicebank_root / "16k" / "train.csv").as_posix()
+    vbd_test = (voicebank_root / "16k" / "test.csv").as_posix()
+    campaign_dir = dataset_cfg.get("voicebank_campaign_dir") or (voicebank_root / "16k" / "campaign").as_posix()
+    val_speakers = tuple(dataset_cfg.get("val_speakers") or ("p239", "p286", "p244", "p270"))
+    rank_count = int(dataset_cfg.get("rank_count", 128))
+    vbd_campaign = build_voicebank_campaign_splits(
+        train_csv=vbd_train,
+        output_dir=campaign_dir,
+        val_speakers=val_speakers,
+        rank_count=rank_count,
+    )
+
+    # DNS5 has train+val locally. Split val into disjoint rank/select for stable training signals.
+    dns5_train = dataset_cfg.get("dns5_train_csv") or (dns5_root / "train.csv").as_posix()
+    dns5_val = dataset_cfg.get("dns5_val_csv") or (dns5_root / "val.csv").as_posix()
+    dns5_rank_count = int(dataset_cfg.get("dns5_rank_count", 4096))
+    dns5_test_from_train_fraction = float(dataset_cfg.get("dns5_test_from_train_fraction", 0.10))
+    split_seed = int(dataset_cfg.get("split_seed", 42))
+    combined_dir = Path(config["paths"]["output_root"]) / "combined"
+    combined_dir.mkdir(parents=True, exist_ok=True)
+    dns5_split = _split_manifest_rank_select(
+        dns5_val,
+        combined_dir / "dns5_val_split",
+        rank_count=dns5_rank_count,
+        force=force,
+        prefix="dns5_val",
+    )
+
+    dns5_test_candidate = str(dataset_cfg.get("dns5_test_csv") or "").strip()
+    dns5_train_for_fit = dns5_train
+    dns5_test_for_combined: str | None = None
+    dns5_test_source = "none"
+    dns5_train_test_split: dict[str, Any] | None = None
+
+    if dns5_test_candidate and Path(dns5_test_candidate).exists():
+        dns5_test_for_combined = dns5_test_candidate
+        dns5_test_source = "external_dns5_test_csv"
+    elif dns5_test_from_train_fraction > 0.0:
+        dns5_train_test_split = _split_manifest_train_test(
+            dns5_train,
+            combined_dir / "dns5_train_test_split",
+            test_fraction=dns5_test_from_train_fraction,
+            seed=split_seed,
+            force=force,
+            prefix="dns5",
+        )
+        dns5_train_for_fit = dns5_train_test_split["train"]
+        dns5_test_for_combined = dns5_train_test_split["test"]
+        dns5_test_source = "derived_from_dns5_train"
+
+    # Build combined manifests.
+    combined_train = _concat_csvs(
+        dataset_cfg["combined_train_csv"],
+        [vbd_campaign["train_fit"], dns5_train_for_fit],
+        force=force,
+    )
+    combined_val_rank = _concat_csvs(
+        dataset_cfg["combined_val_rank_csv"],
+        [vbd_campaign["val_rank"], dns5_split["rank"]],
+        force=force,
+    )
+    combined_val_select = _concat_csvs(
+        dataset_cfg["combined_val_select_csv"],
+        [vbd_campaign["val_select"], dns5_split["select"]],
+        force=force,
+    )
+
+    test_inputs = [vbd_test]
+    dns5_test_included = False
+    if dns5_test_for_combined and Path(dns5_test_for_combined).exists():
+        test_inputs.append(dns5_test_for_combined)
+        dns5_test_included = True
+    combined_test = _concat_csvs(
+        dataset_cfg["combined_test_csv"],
+        test_inputs,
+        force=force,
+    )
+
+    combined_manifests = {
+        "train_fit": combined_train,
+        "val_rank": combined_val_rank,
+        "val_select": combined_val_select,
+        "test": combined_test,
+    }
+    integrity = _audit_manifest_bundle(
+        combined_manifests,
+        strict=True,
+        out_path=combined_dir / "combined_integrity_summary.json",
+    )
+
+    return {
+        "voicebank": {
+            "train_csv": vbd_train,
+            "test_csv": vbd_test,
+            "campaign_manifests": vbd_campaign,
+            "val_speakers": list(val_speakers),
+            "rank_count": rank_count,
+        },
+        "dns5": {
+            "train_csv": dns5_train,
+            "train_fit_csv": dns5_train_for_fit,
+            "val_csv": dns5_val,
+            "val_split": dns5_split,
+            "val_rank_count": dns5_rank_count,
+            "test_csv": dns5_test_for_combined or "",
+            "test_source": dns5_test_source,
+            "test_included_in_combined": dns5_test_included,
+            "train_test_split": dns5_train_test_split or {},
+        },
+        "combined_manifests": combined_manifests,
+        "integrity": integrity,
+        "notes": [
+            "VoiceBank test uses official test.csv.",
+            "VoiceBank validation is speaker-holdout from official train.csv.",
+            "DNS5 val is split into disjoint val_rank/val_select.",
+            "DNS5 test comes from explicit dns5_test_csv or (fallback) deterministic split from DNS5 train.",
+        ],
+    }
+
+
+def _create_reference_splits(manifest_path: str | Path, output_dir: str | Path, *, force: bool = False) -> dict[str, str]:
+    """Create deterministic, leakage-safe 80/10/10 splits for any dataset."""
+
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    train_csv = output_dir / "train_80.csv"
+    val_csv = output_dir / "val_10.csv"
+    test_csv = output_dir / "test_10.csv"
+
+    if train_csv.exists() and val_csv.exists() and test_csv.exists() and not force:
+        return {
+            "train": train_csv.as_posix(),
+            "val": val_csv.as_posix(),
+            "test": test_csv.as_posix(),
+        }
+
+    # Read + dedupe exact pairs.
+    rows = read_pair_manifest(manifest_path)
+    seen_pairs: set[str] = set()
+    unique_rows = []
+    for row in rows:
+        key = _pair_key(row.noisy.as_posix(), row.clean.as_posix())
+        if key in seen_pairs:
+            continue
+        seen_pairs.add(key)
+        unique_rows.append(row)
+    total_samples = len(unique_rows)
+
+    # Group rows so the same clean content never crosses split boundaries.
+    speaker_keys = [_speaker_key(row.clean.as_posix()) for row in unique_rows]
+    speaker_hits = [value for value in speaker_keys if value]
+    speaker_ratio = (len(speaker_hits) / total_samples) if total_samples else 0.0
+    speaker_count = len(set(speaker_hits))
+    use_speaker_groups = speaker_ratio >= 0.98 and speaker_count >= 6
+
+    groups: dict[str, list[Any]] = defaultdict(list)
+    for row in unique_rows:
+        if use_speaker_groups:
+            group_key = _speaker_key(row.clean.as_posix()) or _clean_key(row.clean.as_posix())
+        else:
+            group_key = _clean_key(row.clean.as_posix())
+        groups[group_key].append(row)
+
+    # Deterministic assignment by groups.
+    group_keys = sorted(groups.keys())
+    rng = random.Random(42)
+    rng.shuffle(group_keys)
+
+    train_size = int(0.8 * total_samples)
+    val_size = int(0.1 * total_samples)
+    test_size = total_samples - train_size - val_size
+    targets = {"train": train_size, "val": val_size, "test": test_size}
+    assigned = {"train": [], "val": [], "test": []}
+    counts = {"train": 0, "val": 0, "test": 0}
+
+    for group_key in group_keys:
+        group_rows = groups[group_key]
+        deficits = {name: targets[name] - counts[name] for name in ("train", "val", "test")}
+        if max(deficits.values()) <= 0:
+            split_name = min(counts, key=counts.get)
+        else:
+            split_name = max(deficits, key=deficits.get)
+        assigned[split_name].extend(group_rows)
+        counts[split_name] += len(group_rows)
+
+    train_rows = assigned["train"]
+    val_rows = assigned["val"]
+    test_rows = assigned["test"]
+
+    _write_manifest_rows(train_csv, train_rows)
+    _write_manifest_rows(val_csv, val_rows)
+    _write_manifest_rows(test_csv, test_rows)
+
+    integrity = _audit_manifest_bundle(
+        {"train": train_csv, "val": val_csv, "test": test_csv},
+        strict=True,
+        out_path=output_dir / "split_integrity_summary.json",
+    )
+
+    summary = {
+        "original_manifest": str(Path(manifest_path).resolve()),
+        "total_samples": total_samples,
+        "deduplicated_rows_removed": len(rows) - len(unique_rows),
+        "grouping_strategy": "speaker" if use_speaker_groups else "clean_key",
+        "splits": {
+            "train_80": len(train_rows),
+            "val_10": len(val_rows),
+            "test_10": len(test_rows),
+        },
+        "manifests": {
+            "train": train_csv.as_posix(),
+            "val": val_csv.as_posix(),
+            "test": test_csv.as_posix(),
+        },
+        "integrity": integrity,
+    }
+
+    write_json(output_dir / "reference_split_summary.json", summary)
+    return {
+        "train": train_csv.as_posix(),
+        "val": val_csv.as_posix(),
+        "test": test_csv.as_posix(),
+    }
+
+
+def _prepare_reference_dataset(config: dict[str, Any], *, force: bool = False) -> dict[str, Any]:
+    """Prepare reference 80/10/10 splits for VoiceBank and DNS5, and combined datasets."""
+
+    # Create reference splits for VoiceBank
+    voicebank_splits = _create_reference_splits(
+        config["dataset"]["voicebank_root"] + "/16k/train.csv",
+        config["dataset"]["voicebank_root"] + "/reference_splits",
+        force=force
+    )
+
+    # Create reference splits for DNS5
+    dns5_splits = _create_reference_splits(
+        config["dataset"]["dns5_root"] + "/train.csv",
+        config["dataset"]["dns5_root"] + "/reference_splits",
+        force=force
+    )
+
+    # Create combined datasets
+    combined_dir = Path(config["paths"]["output_root"]) / "combined"
+    combined_dir.mkdir(parents=True, exist_ok=True)
+
+    # Combined training set
+    _concat_csvs(
+        config["dataset"]["combined_train_csv"],
+        [voicebank_splits["train"], dns5_splits["train"]],
+        force=force
+    )
+
+    # Combined validation set
+    _concat_csvs(
+        config["dataset"]["combined_val_csv"],
+        [voicebank_splits["val"], dns5_splits["val"]],
+        force=force
+    )
+
+    # Combined test set
+    _concat_csvs(
+        config["dataset"]["combined_test_csv"],
+        [voicebank_splits["test"], dns5_splits["test"]],
+        force=force
+    )
+
+    combined_manifests = {
+        "train_fit": config["dataset"]["combined_train_csv"],
+        "val_rank": config["dataset"]["combined_val_csv"],
+        "val_select": config["dataset"]["combined_val_csv"],  # Use same as val_rank for simplicity
+        "test": config["dataset"]["combined_test_csv"],
+    }
+    integrity = _audit_manifest_bundle(
+        combined_manifests,
+        strict=True,
+        out_path=combined_dir / "combined_integrity_summary.json",
+    )
+
+    return {
+        "voicebank_splits": voicebank_splits,
+        "dns5_splits": dns5_splits,
+        "combined_manifests": combined_manifests,
+        "integrity": integrity,
+        "val_speakers": [],
+        "rank_count": 0,
+    }
+
+
 def command_prepare_data(config: dict[str, Any], *, force: bool = False) -> dict[str, Any]:
     dataset_type = config["dataset"].get("dataset_type", "voicebank")
     if dataset_type == "voicebank":
@@ -166,6 +704,10 @@ def command_prepare_data(config: dict[str, Any], *, force: bool = False) -> dict
         summary = _prepare_dns5_dataset(config, force=force)
     elif dataset_type == "combined":
         summary = _prepare_combined_dataset(config, force=force)
+    elif dataset_type == "academic_combined":
+        summary = _prepare_academic_combined_dataset(config, force=force)
+    elif dataset_type == "reference_combined":
+        summary = _prepare_reference_dataset(config, force=force)
     else:
         raise ValueError(f"Unknown dataset_type: {dataset_type}")
 
@@ -191,8 +733,19 @@ def command_build_teacher_cache(config: dict[str, Any], *, force: bool = False) 
             "reused": True,
         }
 
+    # Check if we have a trained teacher
+    teacher_checkpoint = None
+    teacher_training_results_path = Path(config["paths"]["output_root"]) / "teacher_training_results.json"
+    if teacher_training_results_path.exists():
+        teacher_results = read_json(teacher_training_results_path)
+        winner = _select_teacher_winner(teacher_results["runs"])
+        teacher_checkpoint = winner["checkpoint_out"]
+    else:
+        # Fall back to pre-trained teacher
+        teacher_checkpoint = config["paths"]["teacher_source_checkpoint"]
+
     teacher_model, _ = load_model_from_checkpoint(
-        config["paths"]["teacher_source_checkpoint"],
+        teacher_checkpoint,
         device="cpu",
         model_family="metricgan_plus_native8k",
         variant="small",
@@ -211,11 +764,64 @@ def command_build_teacher_cache(config: dict[str, Any], *, force: bool = False) 
     summary = {
         "manifest": manifest,
         "out_dir": config["teacher_cache"]["out_dir"],
-        "teacher_source_checkpoint": config["paths"]["teacher_source_checkpoint"],
+        "teacher_checkpoint": teacher_checkpoint,
         "quantized_teacher": True,
     }
     write_json(Path(config["paths"]["output_root"]) / "teacher_cache" / "summary.json", summary)
     return summary
+
+
+def _teacher_experiment_configs(config: dict[str, Any], *, device: str) -> list[ExperimentConfig]:
+    shared = _base_experiment_config(config, device=device)
+    # For teacher training, use combined dataset
+    shared["train_csv"] = config["dataset"]["combined_train_csv"]
+    shared["val_rank_csv"] = config["dataset"].get("combined_val_rank_csv") or config["dataset"].get("combined_val_csv")
+    shared["val_select_csv"] = config["dataset"].get("combined_val_select_csv") or config["dataset"].get("combined_val_csv")
+    shared["test_csv"] = config["dataset"]["combined_test_csv"]
+
+    configs: list[ExperimentConfig] = []
+    for family in config["teacher_training"]["families"]:
+        for variant in config["teacher_training"]["variants"]:
+            for seed in config["teacher_training"]["seeds"]:
+                run_name = f"{family}-{variant}-teacher-training-seed{seed}"
+                checkpoint_out = Path(config["paths"]["output_root"]) / "checkpoints" / "teacher" / f"{run_name}.pt"
+                payload = {
+                    **shared,
+                    "checkpoint_out": checkpoint_out.as_posix(),
+                    "model_family": str(family),
+                    "variant": str(variant),
+                    "loss_recipe": str(config["teacher_training"]["loss_recipe"]),
+                    "run_name": run_name,
+                    "phase": "teacher_training",
+                    "epochs": int(config["teacher_training"]["epochs"]),
+                    "lr": float(config["teacher_training"]["lr"]),
+                    "early_stop_patience": int(config["teacher_training"]["early_stop_patience"]),
+                    "min_epochs": int(config["teacher_training"]["min_epochs"]),
+                    "seed": int(seed),
+                    "qat": False,
+                    "init_checkpoint": None,
+                    "teacher_cache_manifest": None,  # No teacher cache for teacher training
+                }
+                configs.append(ExperimentConfig(**payload))
+    return configs
+
+
+def command_train_teacher(config: dict[str, Any], *, device: str) -> dict[str, Any]:
+    results: list[dict[str, Any]] = []
+    for experiment in _teacher_experiment_configs(config, device=device):
+        results.append(run_experiment(experiment))
+    summary = {
+        "runs": results,
+        "winner": _select_teacher_winner(results),
+    }
+    write_json(Path(config["paths"]["output_root"]) / "teacher_training_results.json", summary)
+    return summary
+
+
+def _select_teacher_winner(teacher_results: list[dict[str, Any]]) -> dict[str, Any]:
+    if not teacher_results:
+        raise ValueError("No teacher training results available.")
+    return max(teacher_results, key=lambda item: float(item.get("best_val_select_pesq") or float("-inf")))
 
 
 def _base_experiment_config(config: dict[str, Any], *, device: str) -> dict[str, Any]:
@@ -535,6 +1141,9 @@ def parse_args() -> argparse.Namespace:
     teacher_cache.add_argument("--force", action="store_true")
     teacher_cache.add_argument("--device", dest="subcommand_device", default=None)
 
+    train_teacher = subparsers.add_parser("train_teacher")
+    train_teacher.add_argument("--device", dest="subcommand_device", default=None)
+
     train_stage1 = subparsers.add_parser("train_stage1")
     train_stage1.add_argument("--device", dest="subcommand_device", default=None)
 
@@ -567,6 +1176,8 @@ def main() -> None:
         payload = command_prepare_data(config, force=bool(args.force))
     elif args.command == "build_teacher_cache":
         payload = command_build_teacher_cache(config, force=bool(args.force))
+    elif args.command == "train_teacher":
+        payload = command_train_teacher(config, device=device)
     elif args.command == "train_stage1":
         payload = command_train_stage1(config, device=device)
     elif args.command == "train_qat":
